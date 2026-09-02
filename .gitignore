@@ -2,4 +2,5 @@
 build/
 module-cache/
 window_probe
+render-skin-preview
 *.zip

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "identifier": "mucha-iris",
+  "displayName": "穆夏 · 鸢尾",
+  "renderer": "MuchaSkin",
+  "metrics": {
+    "seatWidth": 248,
+    "seatHeight": 104,
+    "vineWidth": 28,
+    "topOrnamentHeight": 28,
+    "leftAttachmentX": 38,
+    "rightAttachmentX": 210
+  },
+  "assets": {
+    "seat": {
+      "file": "Assets/seat-fascia.png",
+      "sourceRect": [0, 141, 2172, 570]
+    },
+    "vine": {
+      "file": "Assets/vine-strip.png",
+      "sourceRect": [350, 0, 324, 1536]
+    },
+    "topLeftRosette": {
+      "file": "Assets/top-crown.png",
+      "sourceRect": [405, 520, 205, 220]
+    },
+    "topRightRosette": {
+      "file": "Assets/top-crown.png",
+      "sourceRect": [1465, 520, 205, 220]
+    },
+    "topCenterIris": {
+      "file": "Assets/top-crown.png",
+      "sourceRect": [905, 345, 270, 395]
+    }
+  }
+}
