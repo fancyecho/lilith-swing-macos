@@ -14,23 +14,15 @@
   "assets": {
     "seat": {
       "file": "Assets/seat-fascia.png",
-      "sourceRect": [0, 141, 2172, 570]
+      "sourceRect": [24, 226, 1903, 359]
     },
     "vine": {
       "file": "Assets/vine-strip.png",
       "sourceRect": [350, 0, 324, 1536]
     },
-    "topLeftRosette": {
-      "file": "Assets/top-crown.png",
-      "sourceRect": [405, 520, 205, 220]
-    },
-    "topRightRosette": {
-      "file": "Assets/top-crown.png",
-      "sourceRect": [1465, 520, 205, 220]
-    },
-    "topCenterIris": {
-      "file": "Assets/top-crown.png",
-      "sourceRect": [905, 345, 270, 395]
+    "topOrnament": {
+      "file": "Assets/top-ornament.png",
+      "sourceRect": [10, 258, 2107, 289]
     }
   }
 }

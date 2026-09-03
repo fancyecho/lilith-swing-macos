@@ -71,9 +71,9 @@ static NSColor *MuchaColor(CGFloat red, CGFloat green, CGFloat blue, CGFloat alp
                                    targetHeight);
 
     NSShadow *shadow = [[NSShadow alloc] init];
-    shadow.shadowOffset = NSMakeSize(0.0, -2.0);
-    shadow.shadowBlurRadius = 5.0;
-    shadow.shadowColor = MuchaColor(0.08, 0.06, 0.03, 0.34);
+    shadow.shadowOffset = NSMakeSize(0.0, -1.0);
+    shadow.shadowBlurRadius = 2.5;
+    shadow.shadowColor = MuchaColor(0.15, 0.11, 0.04, 0.18);
     [NSGraphicsContext saveGraphicsState];
     [shadow set];
     [self drawAssetNamed:@"seat" inRect:targetRect fraction:1.0];
@@ -143,36 +143,20 @@ static NSColor *MuchaColor(CGFloat red, CGFloat green, CGFloat blue, CGFloat alp
 - (void)drawTopOrnamentInRect:(NSRect)rect {
     CGFloat leftX = NSMinX(rect) + self.leftAttachmentX;
     CGFloat rightX = NSMinX(rect) + self.rightAttachmentX;
-    CGFloat centerX = NSMidX(rect);
-    CGFloat bottomY = NSMinY(rect);
+    NSRect sourceRect = [self.catalog sourceRectForAssetNamed:@"topOrnament"];
+    if (NSIsEmptyRect(sourceRect)) return;
 
-    NSBezierPath *shadowCurve = [NSBezierPath bezierPath];
-    [shadowCurve moveToPoint:NSMakePoint(leftX, NSMaxY(rect) - 3.0)];
-    [shadowCurve curveToPoint:NSMakePoint(centerX, bottomY + 6.0)
-                controlPoint1:NSMakePoint(leftX + 36.0, NSMaxY(rect) - 2.0)
-                controlPoint2:NSMakePoint(centerX - 40.0, bottomY + 6.0)];
-    [shadowCurve curveToPoint:NSMakePoint(rightX, NSMaxY(rect) - 3.0)
-                controlPoint1:NSMakePoint(centerX + 40.0, bottomY + 6.0)
-                controlPoint2:NSMakePoint(rightX - 36.0, NSMaxY(rect) - 2.0)];
-    [MuchaColor(0.09, 0.10, 0.05, 0.40) setStroke];
-    shadowCurve.lineWidth = 4.4;
-    [shadowCurve stroke];
-    [MuchaColor(0.48, 0.34, 0.12, 0.96) setStroke];
-    shadowCurve.lineWidth = 2.8;
-    [shadowCurve stroke];
-    [MuchaColor(0.79, 0.65, 0.31, 0.80) setStroke];
-    shadowCurve.lineWidth = 0.72;
-    [shadowCurve stroke];
-
-    [self drawAssetNamed:@"topLeftRosette"
-                  inRect:NSMakeRect(leftX - 11.0, bottomY + 4.0, 22.0, 22.0)
-                fraction:1.0];
-    [self drawAssetNamed:@"topRightRosette"
-                  inRect:NSMakeRect(rightX - 11.0, bottomY + 4.0, 22.0, 22.0)
-                fraction:1.0];
-    [self drawAssetNamed:@"topCenterIris"
-                  inRect:NSMakeRect(centerX - 12.0, bottomY + 1.0, 24.0, 25.0)
-                fraction:0.98];
+    // The complete ornament is fitted into the shallow support window as one
+    // asset. Its rosette centres align with the two vines, so no source-image
+    // fragments can hang outside the window and appear clipped at screen top.
+    CGFloat targetWidth = rightX - leftX + 12.0;
+    CGFloat targetHeight = targetWidth * NSHeight(sourceRect) / MAX(1.0, NSWidth(sourceRect));
+    targetHeight = MIN(NSHeight(rect) - 1.0, targetHeight);
+    NSRect targetRect = NSMakeRect(leftX - 6.0,
+                                   NSMidY(rect) - targetHeight / 2.0,
+                                   targetWidth,
+                                   targetHeight);
+    [self drawAssetNamed:@"topOrnament" inRect:targetRect fraction:1.0];
 }
 
 @end

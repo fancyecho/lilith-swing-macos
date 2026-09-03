@@ -64,7 +64,14 @@ int main(int argc, const char *argv[]) {
                                         vineHeight)
                     mirrored:YES
               revealProgress:1.0];
-        [skin drawSeatInRect:NSMakeRect(seatX, seatY, seatSize.width, seatSize.height)];
+        // Match the app's local view coordinates. Some skin details are
+        // attachment offsets within the seat, not absolute canvas positions.
+        [NSGraphicsContext saveGraphicsState];
+        NSAffineTransform *seatTransform = [NSAffineTransform transform];
+        [seatTransform translateXBy:seatX yBy:seatY];
+        [seatTransform concat];
+        [skin drawSeatInRect:NSMakeRect(0.0, 0.0, seatSize.width, seatSize.height)];
+        [NSGraphicsContext restoreGraphicsState];
 
         NSGraphicsContext.currentContext = nil;
         [NSGraphicsContext restoreGraphicsState];

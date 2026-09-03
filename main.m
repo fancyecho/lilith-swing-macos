@@ -2,20 +2,35 @@
 #import <math.h>
 #import "SkinEngine/SwingSkin.h"
 #import "SkinEngine/SwingSkinRegistry.h"
+#import "WindowEngine/SwingWindowPolicy.h"
+#import "WindowEngine/SwingSupportGeometry.h"
 
 static const NSTimeInterval kVineRevealDuration = 0.62;
 static NSString *const kSeatOriginXKey = @"seatOriginX";
 static NSString *const kSeatOriginYKey = @"seatOriginY";
 static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
+static NSString *const kCompatibleTopmostKey = @"compatibleTopmost";
 
 @class SwingController;
 
 @interface PassivePanel : NSPanel
+@property(nonatomic) BOOL compatibleTopmost;
+@property(nonatomic, readonly) BOOL topmostApplied;
 @end
 
 @implementation PassivePanel
 - (BOOL)canBecomeKeyWindow { return NO; }
 - (BOOL)canBecomeMainWindow { return NO; }
+- (void)setCompatibleTopmost:(BOOL)enabled {
+    _compatibleTopmost = enabled;
+    _topmostApplied = SwingSetCompatibleTopmost(self, enabled);
+}
+- (void)orderWindow:(NSWindowOrderingMode)place relativeTo:(NSInteger)otherWindowNumber {
+    [super orderWindow:place relativeTo:otherWindowNumber];
+    if (place != NSWindowOut) {
+        _topmostApplied = SwingSetCompatibleTopmost(self, self.compatibleTopmost);
+    }
+}
 @end
 
 @interface VineView : NSView
@@ -59,6 +74,7 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
 @interface SwingController : NSObject <NSApplicationDelegate>
 @property(nonatomic, strong) id<SwingSkin> skin;
 @property(nonatomic, strong) PassivePanel *seatWindow;
+@property(nonatomic, strong) PassivePanel *seatSupportWindow;
 @property(nonatomic, strong) PassivePanel *leftVineWindow;
 @property(nonatomic, strong) PassivePanel *rightVineWindow;
 @property(nonatomic, strong) PassivePanel *topOrnamentWindow;
@@ -68,11 +84,12 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
 @property(nonatomic, strong) TopOrnamentView *topOrnamentView;
 @property(nonatomic, strong) NSStatusItem *statusItem;
 @property(nonatomic, strong) NSMenu *skinMenu;
-@property(nonatomic, strong) NSTimer *orderingTimer;
 @property(nonatomic, strong) NSTimer *vineAnimationTimer;
 @property(nonatomic) NSTimeInterval vineAnimationStartTime;
 @property(nonatomic) BOOL swingVisible;
 @property(nonatomic) BOOL draggingSeat;
+@property(nonatomic) BOOL compatibleTopmost;
+@property(nonatomic) BOOL extendedSupportActive;
 - (void)moveSeatToOrigin:(NSPoint)origin save:(BOOL)save;
 - (void)beginSeatDrag;
 - (void)finishSeatDrag;
@@ -160,10 +177,22 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     panel.hasShadow = NO;
     panel.hidesOnDeactivate = NO;
     panel.releasedWhenClosed = NO;
+    // A public level above 0 makes the seat invisible to Lilith's window scan.
+    // Use the optional sublevel adapter to keep a stable order within level 0.
     panel.level = NSNormalWindowLevel;
+    panel.compatibleTopmost = self.compatibleTopmost;
     panel.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces |
                                NSWindowCollectionBehaviorFullScreenAuxiliary;
     return panel;
+}
+
+- (PassivePanel *)seatSupportPanelForSeatFrame:(NSRect)seatFrame {
+    PassivePanel *support = [self transparentPanelWithFrame:
+        SwingSupportFrameForSeat(seatFrame, NSScreen.mainScreen.frame)];
+    support.title = @"Lilith Swing Seat";
+    support.ignoresMouseEvents = YES;
+    support.accessibilityElement = NO;
+    return support;
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -171,6 +200,8 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    [defaults registerDefaults:@{kCompatibleTopmostKey: @YES}];
+    self.compatibleTopmost = [defaults boolForKey:kCompatibleTopmostKey];
     NSString *savedSkinIdentifier = [defaults stringForKey:kSelectedSkinKey];
     self.skin = savedSkinIdentifier.length > 0
         ? [SwingSkinRegistry skinWithIdentifier:savedSkinIdentifier]
@@ -191,7 +222,7 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
                                                                   originY,
                                                                   seatSize.width,
                                                                   seatSize.height)];
-    self.seatWindow.title = @"Lilith Swing Seat";
+    self.seatWindow.title = @"Lilith Swing Artwork";
     self.seatWindow.accessibilityTitle = @"莉莉丝秋千座板";
     self.seatWindow.movable = NO;
 
@@ -200,6 +231,10 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     self.seatView.controller = self;
     self.seatView.skin = self.skin;
     self.seatWindow.contentView = self.seatView;
+
+    // This is the one game-visible seating surface in compatibility mode.
+    // The entire extended rectangle passes input through to other apps.
+    self.seatSupportWindow = [self seatSupportPanelForSeatFrame:self.seatWindow.frame];
 
     CGFloat vineWidth = self.skin.vineWindowWidth;
     self.leftVineWindow = [self transparentPanelWithFrame:NSMakeRect(0.0, 0.0, vineWidth, 10.0)];
@@ -239,13 +274,15 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
 
     [self moveSeatToOrigin:NSMakePoint(originX, originY) save:NO];
     [self setupStatusItem];
+    [self applySeatSupportPolicy];
     [self showSwing];
-
-    self.orderingTimer = [NSTimer scheduledTimerWithTimeInterval:0.8
-                                                          target:self
-                                                        selector:@selector(refreshWindowOrder:)
-                                                        userInfo:nil
-                                                         repeats:YES];
+    [self updateTopmostMenuTitle];
+    NSLog(@"[WindowPolicy] compatibleTopmost=%d applied=%d publicLevel=%ld",
+          self.compatibleTopmost, self.seatSupportWindow.topmostApplied,
+          (long)self.seatSupportWindow.level);
+    NSLog(@"[SeatSupport] active=%d frame=%@ artworkFrame=%@ ignoresMouse=%d",
+          self.extendedSupportActive, NSStringFromRect(self.seatSupportWindow.frame),
+          NSStringFromRect(self.seatWindow.frame), self.seatSupportWindow.ignoresMouseEvents);
 }
 
 - (void)setupStatusItem {
@@ -260,6 +297,14 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     toggle.target = self;
     toggle.tag = 1001;
     [menu addItem:toggle];
+
+    NSMenuItem *topmost = [[NSMenuItem alloc] initWithTitle:@"兼容置顶（实验性）"
+                                                  action:@selector(toggleCompatibleTopmost:)
+                                           keyEquivalent:@""];
+    topmost.target = self;
+    topmost.tag = 1002;
+    topmost.toolTip = @"保持置顶并启用透明承托；关闭时恢复普通短座板，便于对照排查。";
+    [menu addItem:topmost];
 
     NSMenuItem *center = [[NSMenuItem alloc] initWithTitle:@"移到屏幕中央"
                                                    action:@selector(centerSwing:)
@@ -280,6 +325,47 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     quit.target = self;
     [menu addItem:quit];
     self.statusItem.menu = menu;
+}
+
+- (void)updateTopmostMenuTitle {
+    NSMenuItem *item = [self.statusItem.menu itemWithTag:1002];
+    BOOL applied = self.seatSupportWindow.topmostApplied && self.leftVineWindow.topmostApplied &&
+                   self.rightVineWindow.topmostApplied && self.topOrnamentWindow.topmostApplied;
+    item.title = self.compatibleTopmost && !applied
+        ? @"兼容置顶（当前系统不可用）" : @"兼容置顶（实验性）";
+    item.state = self.compatibleTopmost && applied ? NSControlStateValueOn : NSControlStateValueOff;
+}
+
+- (void)toggleCompatibleTopmost:(id)sender {
+    (void)sender;
+    self.compatibleTopmost = !self.compatibleTopmost;
+    [NSUserDefaults.standardUserDefaults setBool:self.compatibleTopmost forKey:kCompatibleTopmostKey];
+    for (PassivePanel *panel in @[self.seatWindow, self.seatSupportWindow, self.leftVineWindow,
+                                   self.rightVineWindow, self.topOrnamentWindow]) {
+        panel.compatibleTopmost = self.compatibleTopmost;
+    }
+    [self applySeatSupportPolicy];
+    [self updateTopmostMenuTitle];
+}
+
+- (void)applySeatSupportPolicy {
+    self.extendedSupportActive = self.compatibleTopmost && self.seatSupportWindow.topmostApplied;
+    // Layer 1 excludes the visual duplicate from Lilith's window scan. It is
+    // still below Lilith (3). Only the invisible support remains at layer 0.
+    self.seatWindow.level = self.extendedSupportActive ? NSNormalWindowLevel + 1 : NSNormalWindowLevel;
+    self.seatWindow.compatibleTopmost = self.compatibleTopmost;
+    [self layoutSeatSupport];
+    if (self.extendedSupportActive && self.swingVisible) {
+        [self.seatSupportWindow orderFrontRegardless];
+    } else {
+        [self.seatSupportWindow orderOut:nil];
+    }
+}
+
+- (void)layoutSeatSupport {
+    [self.seatSupportWindow setFrame:SwingSupportFrameForSeat(self.seatWindow.frame,
+                                                             NSScreen.mainScreen.frame)
+                             display:NO];
 }
 
 - (void)rebuildSkinMenu {
@@ -364,6 +450,7 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     [self.leftVineWindow orderFrontRegardless];
     [self.rightVineWindow orderFrontRegardless];
     [self.topOrnamentWindow orderFrontRegardless];
+    if (self.extendedSupportActive) [self.seatSupportWindow orderFrontRegardless];
     [self.seatWindow orderFrontRegardless];
 
     self.vineAnimationStartTime = NSDate.timeIntervalSinceReferenceDate;
@@ -400,6 +487,7 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     [self.topOrnamentWindow orderOut:nil];
     [self.leftVineWindow orderOut:nil];
     [self.rightVineWindow orderOut:nil];
+    [self.seatSupportWindow orderOut:nil];
     [self.seatWindow orderOut:nil];
     [self updateToggleMenuTitle];
 }
@@ -409,23 +497,13 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     toggle.title = self.swingVisible ? @"隐藏秋千" : @"显示秋千";
 }
 
-- (void)refreshWindowOrder:(NSTimer *)timer {
-    (void)timer;
-    if (!self.swingVisible) return;
-    [self.seatWindow orderFrontRegardless];
-    if (self.draggingSeat) return;
-    [self.leftVineWindow orderFrontRegardless];
-    [self.rightVineWindow orderFrontRegardless];
-    [self.topOrnamentWindow orderFrontRegardless];
-    [self.seatWindow orderFrontRegardless];
-}
-
 - (void)moveSeatToOrigin:(NSPoint)origin save:(BOOL)save {
     NSRect visible = NSScreen.mainScreen.visibleFrame;
     NSSize seatSize = self.skin.seatWindowSize;
     origin.x = MAX(NSMinX(visible), MIN(origin.x, NSMaxX(visible) - seatSize.width));
     origin.y = MAX(NSMinY(visible) + 10.0, MIN(origin.y, NSMaxY(visible) - seatSize.height - 8.0));
     [self.seatWindow setFrameOrigin:origin];
+    [self layoutSeatSupport];
 
     if (!self.draggingSeat) [self layoutSupportWindows];
     if (save) {
@@ -442,6 +520,7 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
     [self.topOrnamentWindow orderOut:nil];
     [self.leftVineWindow orderOut:nil];
     [self.rightVineWindow orderOut:nil];
+    if (self.extendedSupportActive) [self.seatSupportWindow orderFrontRegardless];
     [self.seatWindow orderFrontRegardless];
 }
 
@@ -487,7 +566,6 @@ static NSString *const kSelectedSkinKey = @"selectedSkinIdentifier";
 - (void)applicationWillTerminate:(NSNotification *)notification {
     (void)notification;
     [self.vineAnimationTimer invalidate];
-    [self.orderingTimer invalidate];
 }
 
 @end

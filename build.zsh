@@ -9,6 +9,7 @@ readonly CONTENTS_DIR="${APP_ROOT}/Contents"
 readonly MACOS_DIR="${CONTENTS_DIR}/MacOS"
 readonly RESOURCES_DIR="${CONTENTS_DIR}/Resources"
 readonly MODULE_CACHE="${SOURCE_ROOT}/module-cache"
+readonly DEPLOYMENT_TARGET="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "${SOURCE_ROOT}/Info.plist")"
 
 /bin/rm -rf "${APP_ROOT}"
 /bin/mkdir -p "${MACOS_DIR}" "${RESOURCES_DIR}" "${MODULE_CACHE}"
@@ -18,10 +19,13 @@ readonly MODULE_CACHE="${SOURCE_ROOT}/module-cache"
     -O2 \
     -Wall \
     -Wextra \
+    -mmacosx-version-min="${DEPLOYMENT_TARGET}" \
     -framework AppKit \
     -I"${SOURCE_ROOT}" \
     -fmodules-cache-path="${MODULE_CACHE}" \
     "${SOURCE_ROOT}/main.m" \
+    "${SOURCE_ROOT}/WindowEngine/SwingWindowPolicy.m" \
+    "${SOURCE_ROOT}/WindowEngine/SwingSupportGeometry.m" \
     "${SOURCE_ROOT}/SkinEngine/SwingSkin.m" \
     "${SOURCE_ROOT}/SkinEngine/SwingSkinRegistry.m" \
     "${SOURCE_ROOT}/Skins/Mucha/MuchaSkin.m" \
